@@ -1,0 +1,108 @@
+---
+title: "Untitled"
+output: html_document
+date: '2022-05-09'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(lubridate)
+library(tidyverse)
+```
+
+
+```{r}
+# put the data file in a /data subdirectory within the project directory
+d <- read.csv("./data/sheds-station-NYDEC-Delaware River Site 2-data.csv")
+d$dateTime <- mdy_hm(d$datetime)
+d$temperature <- d$temperature..degC.
+d$year <- year(d$dateTime)
+d$yday <- yday(d$dateTime)
+```
+
+### Raw data
+```{r}
+table(d$flagged)
+ggplot(d, aes(dateTime, temperature)) +
+  geom_point()
+```
+
+### Daily data
+```{r}
+daily <- d %>%
+  group_by(year,yday) %>%
+  summarize(meanT = mean(temperature, na.rm = TRUE),
+            sdT = sd(temperature, na.rm = TRUE),
+            maxT = max(temperature, na.rm = TRUE),
+            minT = min(temperature, na.rm = TRUE)) %>%
+  mutate(maxGT20 = ifelse(maxT >= 20, TRUE, FALSE),
+         maxGT22 = ifelse(maxT >= 22, TRUE, FALSE),
+         maxGT24 = ifelse(maxT >= 24, TRUE, FALSE),
+         minGT22 = ifelse(minT >= 22, TRUE, FALSE),
+         maxGT24andMinGT22 = ifelse(maxGT24 & minGT22, TRUE, FALSE),
+         maxGT24orMinGT22 = ifelse(maxGT24 | minGT22, TRUE, FALSE))
+```
+
+### Yearly stats
+```{r}
+
+  # 1. Maximum recorded temperature by year
+  maxTempByYear <- daily %>%
+    group_by(year) %>%
+    summarize(maxT = max(maxT))
+
+  ggplot(maxTempByYear, aes(year,maxT)) +
+    geom_point()
+  
+  # 2. Count of days where maximum recorded temperature is equal to or greater than 20C
+  daysGT20 <- daily %>%
+    group_by(year) %>%
+    summarize(daysGT20 = sum(maxGT20 * 1))
+  
+  ggplot(daily, aes(yday, maxT, color = maxGT20)) +
+    geom_point(size = 0.5) +
+    facet_wrap(~year)
+  
+  ggplot(daysGT20, aes(year,daysGT20)) +
+    geom_col() +
+    scale_y_continuous("Number of days with maximum > 20 C")
+    
+  #3. Count of thermal stress days where either of the following criteria are met:
+    #Maximum temperature is equal to or greater than 24C
+    #Minimum temperature is equal to or greater than 22C
+
+  daysGT24GT22 <- daily %>%
+    group_by(year) %>%
+    summarize(maxGT24andMinGT22 = sum(maxGT24andMinGT22),
+              maxGT24orMinGT22 = sum(maxGT24orMinGT22))
+  
+
+  # Either minGT22 OR maxGT24 are true - blue if both true, green if either, but not both are true
+  ggplot(daily, aes(maxT, minT, color = factor(minGT22 + maxGT24))) +
+    geom_point(size = 0.5) +
+    geom_hline(yintercept = 22) + 
+    geom_vline(xintercept = 24) + 
+    facet_wrap(~year)
+ 
+  ggplot(daysGT24GT22, aes(year,maxGT24orMinGT22)) +
+    geom_col() +
+    scale_y_continuous("Number of days with max > 24 C or min > 22 C")
+   
+  # Both minGT22 AND maxGT24 are true - green if both are true
+  ggplot(daily, aes(maxT, minT, color = factor(minGT22 * maxGT24))) +
+    geom_point(size = 0.5) +
+    geom_hline(yintercept = 22) + 
+    geom_vline(xintercept = 24) + 
+    facet_wrap(~year)
+  
+  ggplot(daysGT24GT22, aes(year,maxGT24andMinGT22)) +
+    geom_col() +
+    scale_y_continuous("Number of days with max > 24 C and min > 22 C")
+    
+
+
+```
+
